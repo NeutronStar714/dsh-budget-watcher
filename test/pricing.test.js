@@ -73,6 +73,31 @@ test("a session's bare model name resolves against the vendor-prefixed list", ()
   assert.equal(resolveOpenRouter(index, ""), undefined);
 });
 
+test("a model resolves across the spellings real session logs use", () => {
+  const index = parseOpenRouterModels(OPENROUTER_BODY);
+  // Hyphens where the list has dots — the two houses disagree on version separators.
+  assert.equal(resolveOpenRouter(index, "claude-sonnet-5-5")?.id, "anthropic/claude-sonnet-5.5");
+  // A dated snapshot suffix names the undated model the list carries.
+  assert.equal(resolveOpenRouter(index, "claude-sonnet-5.5-20250929")?.id, "anthropic/claude-sonnet-5.5");
+  assert.equal(resolveOpenRouter(index, "gpt-5-20250101")?.id, "openai/gpt-5");
+  // A vendor prefix the session spells differently still reaches the bare name.
+  assert.equal(resolveOpenRouter(index, "vendor2/claude-sonnet-5-5")?.id, "anthropic/claude-sonnet-5.5");
+  // Underscores where the list has hyphens.
+  assert.equal(resolveOpenRouter(index, "gemini_2_5_pro")?.id, "google/gemini-2.5-pro");
+
+  // Dropping a date must not conjure a model the list never carried.
+  assert.equal(resolveOpenRouter(index, "claude-sonnet-4-5-20250929"), undefined);
+  // The batch twin keeps its colon, so the interactive price is never used for it.
+  const batched = parseOpenRouterModels({
+    data: [
+      { id: "openai/gpt-5", pricing: { prompt: "0.000001", completion: "0.00001" } },
+      { id: "openai/gpt-5:batch", pricing: { prompt: "0.0000005", completion: "0.000005" } },
+    ],
+  });
+  assert.equal(resolveOpenRouter(batched, "gpt-5:batch")?.cacheMiss, 0.5);
+  assert.equal(resolveOpenRouter(batched, "gpt-5")?.cacheMiss, 1, "first write wins for the bare name");
+});
+
 test("a malformed list is empty rather than a crash", () => {
   assert.equal(parseOpenRouterModels(undefined).size, 0);
   assert.equal(parseOpenRouterModels({}).size, 0);

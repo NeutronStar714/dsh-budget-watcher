@@ -9,7 +9,35 @@ section of the README's [Known limitations](README.md#known-limitations) it move
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A model is no longer unpriced because of how its name is spelled.** The OpenRouter list writes
+  versions with dots (`claude-sonnet-4.6`), while sessions record hyphens (`claude-sonnet-4-6`),
+  dated snapshot suffixes (`claude-sonnet-4-5-20250929`), differently spelled vendor prefixes
+  (`zai/glm-5.3-flash` against `z-ai/glm-5.3-flash`), and occasionally underscores. All of these
+  fell through the exact match and landed in `N turn(s) unpriced` — measured against the live list,
+  flagship Anthropic turns priced at zero cost while the panel claimed coverage. Both sides of the
+  lookup now fold onto one canonical spelling (dots and underscores to hyphens, a trailing
+  `-YYYYMMDD` date dropped), so `gpt-5-20250101` and `vendor2/claude-sonnet-5-5` reach the models
+  they name. A name still resolves only to a model the list actually carries — dropping the date
+  cannot conjure a row that was never listed — and the `:batch` twin keeps its colon, so a batch
+  price never serves an interactive turn.
+- **The first panel you see is priced.** The rate card and the model list were fetched on the first
+  poll but deliberately not awaited, so a fresh fiber reported third-party turns as unpriced for a
+  poll or two before correcting itself — and a panel that was never expanded left them unpriced
+  until the fifteen-minute tick. The fiber's very first poll now waits for both fetches, once; every
+  later poll stays fire-and-forget, and the backoff inside each cache keeps a dead endpoint from
+  costing more than that single wait.
+
+### Changed
+
+- **The `N turn(s) unpriced` row says why.** The payload's `cost.pricing` provenance existed since
+  0.7.0 but the panel never rendered it, so "no change" was indistinguishable from "broken". The row
+  now distinguishes the three cases a user can act on: `rate list unavailable` (the fetch failed —
+  network, not naming), `no USD→CNY rate` (a CNY account waiting on the exchange rate; pin one with
+  `usdToCny` to skip the wait), and `model not in the rate list` (the model is genuinely absent from
+  the list under every spelling it answers to). The full provenance — model count, fetch time, rate
+  and its source — moved into the row's tooltip.
 
 ## [0.7.0] — 2026-10-03
 

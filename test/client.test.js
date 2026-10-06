@@ -658,6 +658,36 @@ test("a model with no published rate is reported instead of costed at zero", asy
   assert.match(textOf(render(component, store).tree), /2 turn\(s\) unpriced/);
 });
 
+test("the unpriced row says why, from the pricing provenance", async () => {
+  const base = { ...COST, session: { ...COST.session, usd: 0, amount: 0, unpricedTurns: 2 } };
+
+  // No rate card at all: a network problem, not a naming problem.
+  const noList = { ...base, pricing: { thirdPartyModels: 0, thirdPartyFetchedAt: null, usdToCny: null, usdToCnySource: null, usdToCnyDate: null } };
+  const list = await mount({ state: { ...HOST_STATE, cost: noList } });
+  render(list.component, list.store);
+  await settle();
+  assert.match(textOf(render(list.component, list.store).tree), /2 turn\(s\) unpriced \u00b7 rate list unavailable/);
+
+  // A card, but no rate to convert USD prices into the CNY total.
+  const noRate = { ...base, pricing: { thirdPartyModels: 459, thirdPartyFetchedAt: "2026-10-05T10:00:00.000Z", usdToCny: null, usdToCnySource: null, usdToCnyDate: null } };
+  const rate = await mount({ state: { ...HOST_STATE, cost: noRate } });
+  render(rate.component, rate.store);
+  await settle();
+  assert.match(textOf(render(rate.component, rate.store).tree), /2 turn\(s\) unpriced \u00b7 no USD\u2192CNY rate/);
+
+  // A card and a rate, so the model itself is what the list does not name.
+  const unknown = { ...base, pricing: { thirdPartyModels: 459, thirdPartyFetchedAt: "2026-10-05T10:00:00.000Z", usdToCny: 7.18, usdToCnySource: "ecb", usdToCnyDate: "2026-10-02" } };
+  const named = await mount({ state: { ...HOST_STATE, cost: unknown } });
+  render(named.component, named.store);
+  await settle();
+  assert.match(textOf(render(named.component, named.store).tree), /2 turn\(s\) unpriced \u00b7 model not in the rate list/);
+
+  // The tooltip carries the provenance the row condenses.
+  const row = JSON.stringify(render(named.component, named.store).tree);
+  assert.match(row, /459 third-party models/);
+  assert.match(row, /7\.18 \(ecb 2026-10-02\)/);
+});
+
 test("a profile with no cost data renders exactly as before", async () => {
   const { component, store } = await mount();
   render(component, store);

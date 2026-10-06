@@ -867,6 +867,10 @@ function apply(ctx, config) {
     const webServer = injected.webServer ?? ctx.get("webServer");
     if (webServer === undefined) return () => {};
 
+    // Whether the fiber's first poll has primed the rate card and the model
+    // list yet. One flag per fiber, reset only when the plugin reloads.
+    let primedPricing = false;
+
     const dispose = webServer.register({
       kind: "exact",
       path: STATE_PATH,
@@ -888,14 +892,25 @@ function apply(ctx, config) {
           ctx.logger?.warn?.(`[${name}] balance refresh failed: ${String(error)}`);
         }
 
-        // Deliberately not awaited. Both are TTL-guarded, so this is a no-op on
-        // almost every poll; on the first one it starts the fetches and the panel
-        // prices third-party models a poll or two later rather than making this
-        // request wait on a stranger's server. `?refresh=1` — the button — does
-        // wait, because the user asked.
+        // Deliberately not awaited — with one exception. Both are TTL-guarded, so
+        // this is a no-op on almost every poll; on the first one it starts the
+        // fetches and the panel prices third-party models a poll or two later
+        // rather than making this request wait on a stranger's server.
+        // `?refresh=1` — the button — does wait, because the user asked.
+        //
+        // The exception is the very first poll of this fiber's life: it waits for
+        // both, so the first panel the user ever sees prices third-party turns
+        // instead of reporting them unpriced and only correcting itself on the
+        // next poll. Once, not always: afterwards the flag routes every poll
+        // through the fire-and-forget path, and a dead endpoint costs this
+        // request one timeout rather than every poll one — the backoff inside
+        // each cache keeps the later un-awaited attempts cheap.
         if (ledger !== undefined) {
           if (force) {
             await Promise.all([fx.resolve(true), priceBook.refresh(true)]);
+          } else if (!primedPricing) {
+            primedPricing = true;
+            await Promise.all([fx.resolve(), priceBook.refresh()]);
           } else {
             void fx.resolve();
             void priceBook.refresh();
