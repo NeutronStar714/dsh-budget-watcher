@@ -428,7 +428,9 @@ Recorded honestly, because each one is a decision rather than an oversight.
     it afterwards**: Node caches an imported ES module for the life of the DSH process, so changing `index.js`
     on disk has no effect on a running profile. The client half is re-served from disk on every request, so an
     edit there does appear — which is how you can end up with a current client drawing a stale host's data.
-    Every payload carries `pluginVersion` precisely so that state is visible rather than guessed at.
+    Every payload carries `pluginVersion` precisely so that state is visible rather than guessed at. It is read
+    from `package.json` at load rather than written by hand: it spent six releases as a hardcoded literal
+    reporting `0.2.0`, which is the exact failure the field was added to prevent.
 15. **The DSH desktop application's bundled profile cannot be installed into from the CLI.** It is managed
     exclusively by the Electron app, and `dsh plugin --profile desktop add …` fails by design. Use the app's
     **Settings → Plugins** page there; the CLI path is for profiles you run yourself.
@@ -586,9 +588,10 @@ Recorded honestly, because each one is a decision rather than an oversight.
     the content box (240:100), so it tracks whatever width the widest text row asks for. A very narrow panel
     therefore shrinks the axis labels with everything else — below roughly 100 CSS pixels of chart width they
     stop being comfortable, and the honest fix there is to switch the chart off.
-55. **The panel's width is set by its longest text row**, which in practice is `this turn ≈¥0.78 / ¥13.05 · 19
-    turns`. Nothing else in the panel can widen it: the chart is deliberately prevented from contributing its own
-    intrinsic width, and the balance and header are shorter. If that row grows, the panel grows with it.
+55. **The panel's width is set by its longest text row**, which in practice is `this turn ≈¥0.78 / ¥13.05`.
+    Nothing else in the panel can widen it: the chart is deliberately prevented from contributing its own
+    intrinsic width, and the balance and header are shorter. If that row grows, the panel grows with it — which
+    is why the turn count was removed from it rather than kept for completeness.
 
 ### Third-party pricing
 
@@ -613,6 +616,12 @@ Recorded honestly, because each one is a decision rather than an oversight.
 61. **The fetched list and the rate are cached on their own timers**, a day and half a day respectively, and a
     failed fetch backs off rather than retrying on every poll. So a price change is picked up within a day, not
     immediately — and DeepSeek's own table, which is bundled, is still only as fresh as `PRICING_READ_ON`.
+62. **A DeepSeek id the bundled table does not list is left unpriced, never priced from the fetched list.** The
+    two disagree by a factor of about three — OpenRouter lists `deepseek/deepseek-v4.1-flash` at 0.044 USD/M
+    input against DeepSeek's own off-peak rate — so falling through there would understate spend convincingly
+    rather than obviously. This is why a DeepSeek model can appear in `N turn(s) unpriced` even though the fetched
+    list plainly carries it. If you see that, the alias table is missing a spelling of the id, and adding it is a
+    one-line fix in `lib/cost.js`.
 
 ## Verified against
 
@@ -634,7 +643,7 @@ Recorded honestly, because each one is a decision rather than an oversight.
   `$0.1236`, matching the published rates to the cent.
 - A real settings write end to end: `POST /dsh-budget-watcher/config` on a running profile put the row's
   `config` into that profile's `cordis.patch.yml`, and re-reading the payload showed the new values effective.
-- `node --test`, **160 tests** covering the payload normalizer, the cost model and **both rate cards**, the
+- `node --test`, **168 tests** covering the payload normalizer, the cost model and **both rate cards**, the
   session ledger (fan-out, descendants, finish-must-not-subtract, wrong-session isolation, per-turn burn,
   frozen duration and **the windowed burn series**), the route (caching, single flight, `?refresh=1`, the fence,
   the config write, the cost payload, **the terminate path firing once and only once**, every failure mode) and

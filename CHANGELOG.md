@@ -9,6 +9,50 @@ section of the README's [Known limitations](README.md#known-limitations) it move
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.7.2] — 2026-10-07
+
+### Fixed
+
+- **`deepseek-v4.1-flash` was reported as "not in the rate list" — the one model the bundled table was written
+  for.** The `deepseek-flash` row is *labelled* `DeepSeek-V4.1-Flash`, but the alias key was spelled
+  `deepseek-v4-flash`, without the `.1`. The id DeepSeek's API actually reports therefore matched nothing, and
+  the turn fell through to the fetched list. Both dotted spellings are now aliased, and a test asserts that every
+  alias in the table resolves, so an alias can no longer rot into a silent miss.
+- **Falling through was worse than the symptom it caused.** OpenRouter lists `deepseek/deepseek-v4.1-flash` at
+  0.044 USD/M input and 0.3/M output — roughly a third of DeepSeek's own published rate — so a DeepSeek turn that
+  missed the table was priced at about a third of its real cost, confidently and invisibly. A test did assert
+  DeepSeek precedence, but it used `deepseek-flash`, which resolves; it never exercised a *failing* DeepSeek
+  lookup. `usageCost` now refuses the fetched book outright for any id matching `/deepseek/i` that the table
+  cannot resolve, and reports the turn unpriced instead. Unpriced is visible; a confident fraction of the truth
+  is not. (README limitation 62.)
+- **The payload's `pluginVersion` reported `0.2.0` while `package.json` said `0.7.x`.** The field exists so a
+  user can tell a stale module from a plugin with nothing to report — a host module is imported once and cached
+  for the life of the DSH process — and it was itself stale by six releases. Its own comment said "keep it in
+  step with package.json", and a test asserted the literal equalled `"0.2.0"`, so the constant agreed with itself
+  and the drift was invisible. It is now read from `package.json` at load (degrading to `"unknown"` rather than
+  failing), and the test compares the payload against the same file the plugin reads, so it cannot drift again.
+
+### Tests
+
+- **The host suite was red for seven hours of every weekday.** One test hardcoded DeepSeek's off-peak CNY rate
+  into its expected value, so it passed all morning and failed the moment the clock crossed into peak hours
+  (01:00-04:00 and 06:00-10:00 UTC, Monday to Friday). Caught live — green at 08:43 Beijing, red at 09:20, which
+  is 01:20 UTC — and the expectation now derives the rate the way the plugin does, leaving the assertion about
+  the aggregation rather than the time of day.
+
+### Changed
+
+- **The this-turn row no longer repeats the turn count.** It read
+  `this turn ≈¥0.10 / ¥18.50 · 37 turns`, and the count is already on screen in DSH's own turn counter — so
+  repeating it only made the row longer, and the panel is exactly as wide as its longest row. The agent count
+  stays, because nothing else in the UI reports a fan-out.
+- **`model not in the rate list` is now `unlisted`.** Same meaning, a fraction of the width, and the full
+  provenance is still in the row's tooltip.
+
+## [0.7.1] — 2026-10-06
+
 ### Fixed
 
 - **A model is no longer unpriced because of how its name is spelled.** The OpenRouter list writes
@@ -661,7 +705,9 @@ API-key balance is not the signed-in Platform account balance; the route is loop
 `allowNonLoopback` is set; polling rather than push, with a 15 s floor; and a new install requires a profile
 restart.
 
-[Unreleased]: https://github.com/NeutronStar714/dsh-budget-watcher/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/NeutronStar714/dsh-budget-watcher/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/NeutronStar714/dsh-budget-watcher/compare/v0.7.1...v0.7.2
+[0.7.1]: https://github.com/NeutronStar714/dsh-budget-watcher/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/NeutronStar714/dsh-budget-watcher/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/NeutronStar714/dsh-budget-watcher/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/NeutronStar714/dsh-budget-watcher/compare/v0.6.1...v0.6.2

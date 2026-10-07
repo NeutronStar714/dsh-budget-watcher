@@ -76,6 +76,47 @@ test("a fully cached prompt is nearly free, and a fully fresh one is not", () =>
   assert.equal(fresh?.cost, 0.15);
 });
 
+test("the id DeepSeek's API reports resolves to the row written for that model", () => {
+  // The bug: the `deepseek-flash` row is labelled "DeepSeek-V4.1-Flash", but the
+  // alias key was spelled `deepseek-v4-flash`, without the `.1`. The one model the
+  // row exists for therefore fell through to the fetched list — where it priced at
+  // roughly a third of the real rate, because OpenRouter's DeepSeek numbers are not
+  // DeepSeek's.
+  const events = billedTurn({ provider: "deepseek", model: "deepseek-v4.1-flash", inputTokens: 1_000_000 });
+  const summary = summarizeCost({ events, nowMs: FRI("12:01"), currency: "CNY" });
+
+  assert.equal(summary.session.unpricedTurns, 0, "it must be priced, not reported as absent");
+  // FRI("12:00") local is 04:00 UTC, and peak ends at 04:00 — so this is DeepSeek's
+  // off-peak CNY uncached rate, 1/M.
+  assert.equal(summary.session.cost, 1, "1M uncached at DeepSeek's own CNY 1/M off-peak rate");
+});
+
+test("every alias in the table resolves, including the dotted spellings", () => {
+  for (const name of ["deepseek-v4.1-flash", "deepseek-v4-flash", "deepseek-v4.1-flash-vision-exp", "deepseek-chat", "deepseek-reasoner"]) {
+    assert.notEqual(pricingFor(name, "CNY"), undefined, `${name} must resolve in the bundled table`);
+  }
+});
+
+test("a DeepSeek id the table cannot resolve is never priced from the book", () => {
+  // Worse than unpriced: OpenRouter's DeepSeek rows are about a third of DeepSeek's
+  // own rate, so falling through there would understate spend convincingly.
+  const events = billedTurn({ provider: "deepseek", model: "deepseek-v9-unreleased", inputTokens: 1_000_000 });
+  let consulted = false;
+  const summary = summarizeCost({
+    events,
+    nowMs: FRI("12:01"),
+    currency: "CNY",
+    lookup: () => {
+      consulted = true;
+      return { cacheHit: 0.04, cacheMiss: 0.3, output: 2 };
+    },
+  });
+
+  assert.equal(consulted, false, "the book is not asked about a DeepSeek name at all");
+  assert.equal(summary.session.cost, 0);
+  assert.equal(summary.session.unpricedTurns, 1, "it reports unknown rather than a confident fraction of the truth");
+});
+
 test("a large cached prefix does not cancel the uncached remainder", () => {
   // The bug this guards: treating `inputTokens` as the whole prompt and
   // subtracting cache reads would clamp 50k uncached against a 1M cached prefix

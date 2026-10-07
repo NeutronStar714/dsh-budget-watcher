@@ -1,6 +1,6 @@
 {
   "name": "dsh-budget-watcher",
-  "version": "0.7.0",
+  "version": "0.7.2",
   "description": "DeepSeek Harness plugin: a small floating window over the conversation showing the balance left on your API account, and what recent turns actually cost.",
   "peerDependencies": {
     "@deepseek-ai/schemastery": "~3.18.4"

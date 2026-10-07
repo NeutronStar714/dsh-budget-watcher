@@ -415,7 +415,8 @@ test("the panel shows this turn, a live burn and the turn's average burn", async
   assert.doesNotMatch(text, /last turn/);
   // The turn's own cost and the conversation total share one row: what this cost
   // against what it all costs is one thought, not two.
-  assert.match(text, /\u2248\u00a50\.22 \/ \u00a515\.12 \u00b7 4 turns \u00b7 40 agents/, "turn and session share a row");
+  assert.match(text, /\u2248\u00a50\.22 \/ \u00a515\.12 \u00b7 40 agents/, "turn and session share a row");
+  assert.doesNotMatch(text, /4 turns/, "the turn count is not repeated — DSH already shows it, and it made this row the panel's widest");
   assert.doesNotMatch(text, /session /, "the separate session row is gone");
   assert.match(text, /40 agents/, "the fan-out is still visible");
 
@@ -568,7 +569,7 @@ test("with no turn the session total keeps a row of its own", async () => {
   await settle();
   const text = textOf(render(component, store).tree);
   assert.match(text, /session/, "nothing to pair it with, so it stands alone");
-  assert.match(text, /\u00a515\.12 \u00b7 4 turns \u00b7 40 agents/);
+  assert.match(text, /\u00a515\.12 \u00b7 40 agents/);
   assert.doesNotMatch(text, /this turn/);
 });
 
@@ -680,7 +681,7 @@ test("the unpriced row says why, from the pricing provenance", async () => {
   const named = await mount({ state: { ...HOST_STATE, cost: unknown } });
   render(named.component, named.store);
   await settle();
-  assert.match(textOf(render(named.component, named.store).tree), /2 turn\(s\) unpriced \u00b7 model not in the rate list/);
+  assert.match(textOf(render(named.component, named.store).tree), /2 turn\(s\) unpriced \u00b7 unlisted/);
 
   // The tooltip carries the provenance the row condenses.
   const row = JSON.stringify(render(named.component, named.store).tree);

@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, test } from "node:test";
 
 import { apply } from "../index.js";
+import { isPeak } from "../lib/cost.js";
 
 const STATE_PATH = "/dsh-budget-watcher/balance";
 const CONFIG_PATH = "/dsh-budget-watcher/config";
@@ -422,11 +423,19 @@ test("a fan-out raises the burn warning the turn figure alone would hide", async
 
   const { body } = await request(harness.routes.get(STATE_PATH), { url: `${STATE_PATH}?session=session-root` });
   assert.equal(body.cost.session.descendants, 40);
-  // 40 x CNY 1.00 + CNY 0.01.
-  assert.equal(body.cost.session.cost.toFixed(2), (40 * 1 + 0.01).toFixed(2));
+  // The rate depends on the wall clock: DeepSeek charges double at peak
+  // (01:00-04:00 and 06:00-10:00 UTC, Monday to Friday). Hardcoding the off-peak
+  // rate made this suite fail for seven hours of every weekday — observed, not
+  // theorised: it passed at 08:43 Beijing and failed at 09:20, which is 01:20 UTC.
+  // The expectation now follows the same rule the plugin does, so what is being
+  // asserted is the aggregation — forty children, each counted once — rather than
+  // the time of day.
+  const perMillion = isPeak(now) ? 2 : 1; // CNY, uncached input
+  const expected = (40 * perMillion + 0.01 * perMillion).toFixed(2);
+  assert.equal(body.cost.session.cost.toFixed(2), expected);
   // The turn's own figure is attributed by time window, so the agents it
   // spawned land inside it rather than being invisible until the rollup.
-  assert.equal(body.cost.thisTurn.cost.toFixed(2), (40 * 1 + 0.01).toFixed(2));
+  assert.equal(body.cost.thisTurn.cost.toFixed(2), expected);
   assert.equal(body.cost.burnWindowMs, 15_000);
   assert.equal(body.cost.liveBurnPerHour > 2, true, `the live rate is what warns, got ${body.cost.liveBurnPerHour}`);
   assert.equal(body.cost.warn, true, "the live rate is what warns");
@@ -559,7 +568,13 @@ test("the payload carries the plugin version, so a stale module is visible", asy
   apply(harness.ctx, {});
 
   const { body } = await request(harness.routes.get(STATE_PATH));
-  assert.equal(body.pluginVersion, "0.2.0", "a host module is cached for the life of the DSH process; this says which one answered");
+  // Compared against package.json, not against a literal. The previous version of
+  // this test asserted `=== "0.2.0"` while package.json said 0.7.x, so it confirmed
+  // the constant matched itself and the field silently lied for six releases.
+  // Reading the same source the plugin reads is what makes drift impossible.
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(body.pluginVersion, pkg.version, "a host module is cached for the life of the DSH process; this says which one answered");
+  assert.notEqual(body.pluginVersion, "0.2.0", "the stale value this field reported for six releases");
 });
 
 test("the agents service is used when there is no session registry", async () => {

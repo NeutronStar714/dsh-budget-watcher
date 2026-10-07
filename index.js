@@ -18,6 +18,8 @@
 //    reported as a state the widget renders rather than an exception that
 //    escapes into the loader.
 
+import { readFileSync } from "node:fs";
+
 import { describeHttpFailure, normalizeBalance, pickWallet } from "./lib/balance.js";
 import { COST_CURRENCIES, normalizeCostCurrency } from "./lib/cost.js";
 import { createFxCache, parseFxSetting } from "./lib/fx.js";
@@ -62,9 +64,25 @@ const DEFAULT_TERMINATE_PER_HOUR = 0;
  * process, so editing a loaded plugin's source has no effect until that process
  * restarts. Without a marker in the response there is no way to tell a stale
  * module from a plugin that simply has nothing to report — which is exactly the
- * confusion this field exists to end. Keep it in step with package.json.
+ * confusion this field exists to end.
+ *
+ * Read from package.json rather than written here. It used to be a literal whose
+ * comment said "keep it in step with package.json", and it drifted six releases:
+ * the field whose entire purpose is to reveal a stale module was itself stale,
+ * and the test asserted the literal equalled its own old value, so it agreed with
+ * itself and never noticed. A version marker that has to be maintained by hand is
+ * a version marker that will be wrong; deriving it cannot drift.
+ *
+ * A failure here is diagnostics-only, so it degrades to "unknown" rather than
+ * taking the plugin down.
  */
-const PLUGIN_VERSION = "0.2.0";
+const PLUGIN_VERSION = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+})();
 
 /**
  * Providers this plugin can read. Only DeepSeek is implemented; the table
